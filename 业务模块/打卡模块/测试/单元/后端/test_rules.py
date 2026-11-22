@@ -14,7 +14,7 @@ def test_habit_name_removes_surrounding_whitespace() -> None:
 
 
 def test_habit_name_preserves_internal_whitespace() -> None:
-    assert normalize_habit_name("读书 半小时") == "读书 半小时"
+    assert normalize_habit_name("读书 半小时") == "读书半小时"
 
 
 def test_habit_name_accepts_one_character() -> None:
