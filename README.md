@@ -67,6 +67,12 @@ cd "业务模块\打卡模块"
 .\测试\冒烟\运行冒烟测试.ps1
 ```
 
+双视角审查汇总器的本地测试：
+
+```powershell
+python -m unittest discover -s .github/codex/scripts -p "test_*.py"
+```
+
 ## 目录
 
 - `业务模块/打卡模块/功能模块/`：前端、后端和 SQLite 表结构。
@@ -74,12 +80,15 @@ cd "业务模块\打卡模块"
 - `业务模块/打卡模块/文档/`：技术选型、测试边界、CI 和模块记忆。
 - `文档/产品设计/`：当前产品边界。
 - `.github/workflows/ci.yml`：持续集成工作流。
+- `.github/workflows/code-review.yml`：双视角 Codex PR 审查。
 
 ## 当前阶段
 
 第一阶段已完成：单模块、单元测试、接口测试和冒烟测试。
 
-第二阶段已完成：已建立公开 GitHub 仓库和 GitHub Actions CI，并将质量检查与核心冒烟测试设为 `main` 的必需门禁。多模块和项目管理中台暂缓。
+第二阶段已完成：已建立公开 GitHub 仓库和 GitHub Actions CI，并将质量检查与核心冒烟测试设为 `main` 的必需门禁。
+
+第三阶段进行中：增加“正确性”和“工作必要性”两个建议型 PR 审查 agent。它们不替代现有测试、冒烟验证或正式人工审查。
 
 ## 许可证
 
