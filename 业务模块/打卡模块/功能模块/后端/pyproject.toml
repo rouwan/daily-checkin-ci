@@ -1,0 +1,29 @@
+[project]
+name = "checkin-backend"
+version = "0.1.0"
+description = "单习惯每日打卡本地后端"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "fastapi==0.165.0",
+    "uvicorn==0.54.0",
+]
+
+[tool.fastapi]
+entrypoint = "app.main:app"
+
+[dependency-groups]
+dev = [
+    "httpx2>=2.16.2",
+    "pytest>=9.2.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = [
+    "../../测试/单元/后端",
+    "../../测试/接口/后端",
+]
+pythonpath = ["."]
+markers = [
+    "unit: 后端纯单元测试",
+    "interface: 后端 HTTP 接口测试",
+]

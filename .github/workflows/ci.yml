@@ -1,0 +1,136 @@
+name: 持续集成
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION: "24"
+  UV_VERSION: "0.13.9"
+  PLAYWRIGHT_VERSION: "1.60.0"
+  PYTHONUTF8: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  quality:
+    name: 质量检查
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: 设置 Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: 安装 uv ${{ env.UV_VERSION }}
+        run: python -m pip install "uv==${UV_VERSION}"
+
+      - name: 同步后端依赖
+        working-directory: 业务模块/打卡模块/功能模块/后端
+        run: uv sync --frozen
+
+      - name: 运行后端单元测试
+        working-directory: 业务模块/打卡模块/功能模块/后端
+        run: uv run pytest -m unit -q
+
+      - name: 运行单模块接口测试
+        working-directory: 业务模块/打卡模块/功能模块/后端
+        run: uv run pytest -m interface -q
+
+      - name: 设置 Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: 业务模块/打卡模块/功能模块/前端/package-lock.json
+
+      - name: 安装前端依赖
+        working-directory: 业务模块/打卡模块/功能模块/前端
+        run: npm ci
+
+      - name: 构建前端
+        working-directory: 业务模块/打卡模块/功能模块/前端
+        run: npm run build
+
+      - name: 输出质量检查汇总
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## 质量检查"
+            echo ""
+            echo "已执行后端单元测试、单模块接口测试和前端生产构建。"
+            echo "详细结果见上方各步骤。"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  smoke:
+    name: 核心冒烟测试
+    needs: quality
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: 设置 Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: 安装 uv ${{ env.UV_VERSION }}
+        run: python -m pip install "uv==$env:UV_VERSION"
+
+      - name: 同步后端依赖
+        working-directory: 业务模块/打卡模块/功能模块/后端
+        run: uv sync --frozen
+
+      - name: 设置 Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: 业务模块/打卡模块/功能模块/前端/package-lock.json
+
+      - name: 安装前端依赖
+        working-directory: 业务模块/打卡模块/功能模块/前端
+        run: npm ci
+
+      - name: 安装 Playwright 与 Chromium
+        run: |
+          python -m pip install "playwright==$env:PLAYWRIGHT_VERSION"
+          python -m playwright install chromium
+
+      - name: 运行两条核心冒烟路径
+        working-directory: 业务模块/打卡模块
+        env:
+          CHECKIN_SMOKE_BROWSER_CHANNEL: bundled
+        run: .\测试\冒烟\运行冒烟测试.ps1
+
+      - name: 输出冒烟测试汇总
+        if: always()
+        shell: pwsh
+        run: |
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value @(
+            "## 核心冒烟测试"
+            ""
+            "已执行首次设置并打卡、撤销今天打卡两条真实浏览器路径。"
+            "详细结果见上方步骤。"
+          )

@@ -1,0 +1,68 @@
+# 本机密钥与环境配置
+.env
+.env.*
+*.env
+!.env.example
+!.env.sample
+!.env.template
+!业务模块/打卡模块/配置/本地配置示例.env
+
+# 本地数据库与日志
+*.sqlite
+*.sqlite3
+*.sqlite3-journal
+*.sqlite3-shm
+*.sqlite3-wal
+*.db
+*.log
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.pyright/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# Node、Vite 与前端测试产物
+node_modules/
+dist/
+.vite/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+playwright-report/
+test-results/
+blob-report/
+*.trace.zip
+*.har
+
+# 本地学习记录与临时文件
+.learnings/
+*.local
+*.tmp
+*.bak
+
+# 仅在本机用于开发指导的第三方技能
+# 这些目录缺少可随公开仓库分发的许可证文件，不上传到公开仓库。
+/业务模块/打卡模块/技能/fastapi/
+/业务模块/打卡模块/技能/frontend-design/
+/业务模块/打卡模块/技能/vue/
+/业务模块/打卡模块/技能/web-design-guidelines/
+
+# 编辑器与操作系统文件
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
