@@ -2,19 +2,11 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "additionalProperties": false,
-  "required": [
-    "perspective",
-    "summary",
-    "findings",
-    "limitations"
-  ],
+  "required": ["perspective", "summary", "findings", "limitations"],
   "properties": {
     "perspective": {
       "type": "string",
-      "enum": [
-        "correctness",
-        "work_necessity"
-      ]
+      "enum": ["correctness", "work_necessity"]
     },
     "summary": {
       "type": "string",
@@ -39,11 +31,7 @@
         "properties": {
           "priority": {
             "type": "string",
-            "enum": [
-              "P1",
-              "P2",
-              "P3"
-            ]
+            "enum": ["P1", "P2", "P3"]
           },
           "title": {
             "type": "string",
@@ -51,17 +39,12 @@
             "maxLength": 120
           },
           "file": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
+            "minLength": 1,
             "maxLength": 240
           },
           "line": {
-            "type": [
-              "integer",
-              "null"
-            ],
+            "type": ["integer", "null"],
             "minimum": 1
           },
           "impact": {

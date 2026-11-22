@@ -136,6 +136,8 @@ def _validate_payload(
             )
 
         line = finding_value["line"]
+        if isinstance(line, float) and line.is_integer():
+            line = int(line)
         if line is not None and (
             isinstance(line, bool) or not isinstance(line, int) or line < 1
         ):
@@ -232,24 +234,28 @@ def _render_perspective(
             lines.extend([_escape_markdown(error), ""])
         return lines
 
+    if job_result != "success":
+        lines.extend([f"**执行状态：{_escape_markdown(job_result)}**", ""])
+        if error:
+            lines.extend([_escape_markdown(error), ""])
+
     lines.extend([_escape_markdown(payload["summary"]), ""])
     findings = payload["findings"]
     if not findings:
         lines.extend(["未发现需要报告的问题。", ""])
-        return lines
-
-    for finding in findings:
-        lines.extend(
-            [
-                f"#### [{finding['priority']}] {_escape_markdown(finding['title'])}",
-                "",
-                f"- 位置：{_format_location(finding)}",
-                f"- 影响：{_escape_markdown(finding['impact'])}",
-                f"- 证据：{_escape_markdown(finding['evidence'])}",
-                f"- 建议：{_escape_markdown(finding['recommendation'])}",
-                "",
-            ]
-        )
+    else:
+        for finding in findings:
+            lines.extend(
+                [
+                    f"#### [{finding['priority']}] {_escape_markdown(finding['title'])}",
+                    "",
+                    f"- 位置：{_format_location(finding)}",
+                    f"- 影响：{_escape_markdown(finding['impact'])}",
+                    f"- 证据：{_escape_markdown(finding['evidence'])}",
+                    f"- 建议：{_escape_markdown(finding['recommendation'])}",
+                    "",
+                ]
+            )
 
     limitations = payload["limitations"]
     if limitations:
@@ -284,14 +290,23 @@ def aggregate(
     errors: dict[str, str] = {}
 
     for perspective in EXPECTED_PERSPECTIVES:
+        perspective_errors: list[str] = []
         try:
             raw_payload = _read_output(files[perspective], perspective)
             payloads[perspective] = _validate_payload(raw_payload, perspective)
         except ReviewValidationError as error:
             payloads[perspective] = None
-            errors[perspective] = str(error)
+            perspective_errors.append(str(error))
+        if results[perspective] != "success":
+            perspective_errors.append(
+                f"agent job result 为 {results[perspective]}"
+            )
+        if perspective_errors:
+            errors[perspective] = "；".join(perspective_errors)
 
-    all_valid = not errors
+    all_valid = not errors and all(
+        result == "success" for result in results.values()
+    )
     safe_sha = re.sub(r"[^0-9a-f]", "", head_sha.lower())[:40] or "unknown"
     findings_count = sum(
         len(payload["findings"])

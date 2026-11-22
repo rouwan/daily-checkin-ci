@@ -22,6 +22,9 @@ class AggregateReviewTests(unittest.TestCase):
         self,
         correctness: object,
         work_necessity: object,
+        *,
+        correctness_result: str = "success",
+        work_necessity_result: str = "success",
     ) -> tuple[bool, str, dict[str, object]]:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
@@ -45,8 +48,8 @@ class AggregateReviewTests(unittest.TestCase):
             ok = aggregate(
                 correctness_file=correctness_file,
                 work_necessity_file=work_necessity_file,
-                correctness_result="success",
-                work_necessity_result="success",
+                correctness_result=correctness_result,
+                work_necessity_result=work_necessity_result,
                 output_file=output_file,
                 state_file=state_file,
                 head_sha="ABCDEF1234",
@@ -113,6 +116,76 @@ class AggregateReviewTests(unittest.TestCase):
         self.assertIn("&lt;script&gt;", summary)
         self.assertIn("app.py:12", summary)
         self.assertEqual(state["findings_count"], 1)
+
+    def test_limitations_are_rendered_without_findings(self) -> None:
+        correctness = valid_payload("correctness")
+        correctness["limitations"] = ["未验证运行时行为"]
+
+        ok, summary, _ = self.run_aggregate(
+            correctness,
+            valid_payload("work_necessity"),
+        )
+
+        self.assertTrue(ok)
+        self.assertIn("未发现需要报告的问题", summary)
+        self.assertIn("审查限制", summary)
+        self.assertIn("未验证运行时行为", summary)
+
+    def test_failed_job_result_invalidates_valid_payload(self) -> None:
+        ok, summary, state = self.run_aggregate(
+            valid_payload("correctness"),
+            valid_payload("work_necessity"),
+            correctness_result="failure",
+        )
+
+        self.assertFalse(ok)
+        self.assertIn("执行状态：failure", summary)
+        self.assertFalse(state["ok"])
+        self.assertIn("job result 为 failure", state["errors"]["correctness"])
+
+    def test_integral_float_line_is_accepted(self) -> None:
+        correctness = valid_payload("correctness")
+        correctness["findings"] = [
+            {
+                "priority": "P2",
+                "title": "日期比较缺失",
+                "file": "app.py",
+                "line": 1.0,
+                "impact": "连续天数错误",
+                "evidence": "比较条件为空",
+                "recommendation": "恢复比较",
+            }
+        ]
+
+        ok, summary, _ = self.run_aggregate(
+            correctness,
+            valid_payload("work_necessity"),
+        )
+
+        self.assertTrue(ok)
+        self.assertIn("app.py:1", summary)
+
+    def test_empty_file_name_matches_schema_constraint(self) -> None:
+        correctness = valid_payload("correctness")
+        correctness["findings"] = [
+            {
+                "priority": "P2",
+                "title": "位置缺失",
+                "file": "",
+                "line": None,
+                "impact": "无法定位",
+                "evidence": "空文件字段",
+                "recommendation": "提供文件路径",
+            }
+        ]
+
+        ok, _, state = self.run_aggregate(
+            correctness,
+            valid_payload("work_necessity"),
+        )
+
+        self.assertFalse(ok)
+        self.assertIn("file 不能为空", state["errors"]["correctness"])
 
     def test_missing_output_file_is_reported(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
