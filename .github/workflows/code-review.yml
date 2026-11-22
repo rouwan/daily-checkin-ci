@@ -132,7 +132,6 @@ jobs:
             --correctness-result "$CORRECTNESS_RESULT" \
             --work-necessity-result "$WORK_NECESSITY_RESULT" \
             --output "$RUNNER_TEMP/review-summary.md" \
-            --state "$RUNNER_TEMP/review-state.json" \
             --head-sha "$HEAD_SHA"
 
       - name: 创建或更新汇总评论

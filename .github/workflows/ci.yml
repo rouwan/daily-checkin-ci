@@ -54,6 +54,9 @@ jobs:
         working-directory: 业务模块/打卡模块/功能模块/后端
         run: uv run pytest -m interface -q
 
+      - name: 运行审查汇总器测试
+        run: python -m unittest discover -s .github/codex/scripts -p "test_*.py"
+
       - name: 设置 Node.js ${{ env.NODE_VERSION }}
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
