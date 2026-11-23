@@ -1,0 +1,197 @@
+name: 双视角代码审查
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codex-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  correctness:
+    name: 审查：正确性
+    if: >-
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      final_message: ${{ steps.review.outputs.final-message }}
+
+    steps:
+      - name: 检出 Pull Request
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/pull/${{ github.event.pull_request.number }}/merge
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: 运行正确性审查 agent
+        id: review
+        uses: openai/codex-action@306c6a196a99dcc6582530c396a19d2672d5e9ec # v1.14
+        with:
+          openai-api-key: ${{ secrets.DEEPSEEK_API_KEY }}
+          responses-api-endpoint: https://api.deepseek.com/responses
+          model: deepseek-flash
+          effort: high
+          codex-version: 0.171.0
+          codex-args: '["--ephemeral"]'
+          prompt-file: .github/codex/prompts/correctness.md
+          output-file: codex-correctness.json
+          output-schema-file: .github/codex/schema/review-output.json
+          sandbox: read-only
+          safety-strategy: drop-sudo
+
+  work_necessity:
+    name: 审查：工作必要性
+    if: >-
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      final_message: ${{ steps.review.outputs.final-message }}
+
+    steps:
+      - name: 检出 Pull Request
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/pull/${{ github.event.pull_request.number }}/merge
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: 运行工作必要性审查 agent
+        id: review
+        uses: openai/codex-action@306c6a196a99dcc6582530c396a19d2672d5e9ec # v1.14
+        with:
+          openai-api-key: ${{ secrets.DEEPSEEK_API_KEY }}
+          responses-api-endpoint: https://api.deepseek.com/responses
+          model: deepseek-flash
+          effort: high
+          codex-version: 0.171.0
+          codex-args: '["--ephemeral"]'
+          prompt-file: .github/codex/prompts/work-necessity.md
+          output-file: codex-work-necessity.json
+          output-schema-file: .github/codex/schema/review-output.json
+          sandbox: read-only
+          safety-strategy: drop-sudo
+
+  summary:
+    name: 审查汇总
+    needs:
+      - correctness
+      - work_necessity
+    if: >-
+      always() &&
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+
+    steps:
+      - name: 检出汇总脚本
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: 保存两个 agent 的输出
+        shell: bash
+        env:
+          CORRECTNESS_JSON: ${{ needs.correctness.outputs.final_message }}
+          WORK_NECESSITY_JSON: ${{ needs.work_necessity.outputs.final_message }}
+        run: |
+          printf '%s' "$CORRECTNESS_JSON" > "$RUNNER_TEMP/correctness.json"
+          printf '%s' "$WORK_NECESSITY_JSON" > "$RUNNER_TEMP/work-necessity.json"
+
+      - name: 校验并生成汇总
+        id: aggregate
+        continue-on-error: true
+        shell: bash
+        env:
+          CORRECTNESS_RESULT: ${{ needs.correctness.result }}
+          WORK_NECESSITY_RESULT: ${{ needs.work_necessity.result }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          python3 .github/codex/scripts/aggregate_review.py \
+            --correctness-file "$RUNNER_TEMP/correctness.json" \
+            --work-necessity-file "$RUNNER_TEMP/work-necessity.json" \
+            --correctness-result "$CORRECTNESS_RESULT" \
+            --work-necessity-result "$WORK_NECESSITY_RESULT" \
+            --output "$RUNNER_TEMP/review-summary.md" \
+            --head-sha "$HEAD_SHA"
+
+      - name: 创建或更新汇总评论
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        env:
+          SUMMARY_PATH: ${{ runner.temp }}/review-summary.md
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- codex-two-perspective-review -->';
+            const summaryPath = process.env.SUMMARY_PATH;
+            const body = fs.existsSync(summaryPath)
+              ? fs.readFileSync(summaryPath, 'utf8')
+              : `${marker}
+            ## Codex 双视角审查
+
+            汇总结果生成失败，请查看工作流日志。`;
+
+            const comments = await github.paginate(
+              github.rest.issues.listComments,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.pull_request.number,
+                per_page: 100,
+              },
+            );
+            const previous = comments.find(
+              (comment) =>
+                comment.user?.type === 'Bot' &&
+                comment.body?.includes(marker),
+            );
+
+            if (previous) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: previous.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.pull_request.number,
+                body,
+              });
+            }
+
+      - name: 保持技术错误可见
+        if: steps.aggregate.outcome != 'success'
+        run: exit 1
+
+      - name: 输出审查汇总
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## Codex 双视角审查"
+            echo ""
+            echo "本次执行结果见 Pull Request 汇总评论。"
+          } >> "$GITHUB_STEP_SUMMARY"
